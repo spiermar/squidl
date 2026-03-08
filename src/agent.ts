@@ -16,7 +16,7 @@ function createModel(): Model<any> {
       id: modelId,
       name: modelId,
       api: (api || "openai-completions") as "openai-completions",
-      provider: "custom",
+      provider: "openai",
       baseUrl,
       reasoning: true,
       input: ["text"] as const,
@@ -51,7 +51,7 @@ export async function createSession(sessionManager: any) {
     resourceLoader,
   });
 
-  const apiKey = process.env.LLM_API_KEY;
+  const apiKey = process.env.OPENAI_API_KEY;
   session.agent.streamFn = (model: any, context: any, options?: any) => {
     return streamSimple(model, context, {
       ...options,

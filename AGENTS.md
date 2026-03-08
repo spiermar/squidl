@@ -110,7 +110,7 @@ Required:
 
 Optional:
 - `LLM_API` - API type (default: "openai-completions")
-- `LLM_API_KEY` - API key for authentication
+- `OPENAI_API_KEY` - API key for authentication
 - `AGENT_PROMPT` - If set, runs single prompt instead of REPL
 
 See `.env.example` for reference.
