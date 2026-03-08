@@ -16,6 +16,8 @@ A TypeScript-based PI Agent container providing an AI agent with file system too
 | `LLM_API` | No | API type (default: "openai-completions") |
 | `LLM_API_KEY` | No | API key for authentication |
 | `AGENT_PROMPT` | No | If set, runs single prompt instead of REPL |
+| `WEBSOCKET_MODE` | No | If set, runs WebSocket server instead of REPL |
+| `WEBSOCKET_PORT` | No | Port for WebSocket server (default: 8080) |
 
 ## Build the Container
 
@@ -54,7 +56,20 @@ docker run --rm \
 
 ### WebSocket Mode
 
-To run in WebSocket mode, you'll need to modify the agent to support WebSocket connections. The current implementation supports REPL and AGENT_PROMPT modes.
+Run the WebSocket server to accept connections:
+
+```bash
+docker run --rm \
+  -e LLM_BASE_URL=http://host.docker.internal:11434/v1 \
+  -e LLM_MODEL=llama3 \
+  -e LLM_API_KEY=ollama \
+  -e WEBSOCKET_MODE=true \
+  -p 8080:8080 \
+  -v $(pwd)/workspace:/app/workspace \
+  pi-agent
+```
+
+Connect to `ws://localhost:8080` to interact with the agent via WebSocket.
 
 ## Volume Mount
 
