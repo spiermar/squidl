@@ -4,7 +4,7 @@ This file provides instructions for agentic coding agents operating in this repo
 
 ## Project Overview
 
-This is a TypeScript-based PI Agent container that provides an AI agent with file system tools. The agent runs as a REPL or processes prompts from environment variables.
+This is a TypeScript-based PI Agent container that provides an AI agent with file system tools. The agent runs as a REPL, processes prompts from environment variables, or can run as a WebSocket server for remote connections.
 
 ## Build, Lint, and Test Commands
 
@@ -44,10 +44,11 @@ npx tsc --noEmit      # Type-check without emitting files
 - **Strict TypeScript** enabled (strict: true in tsconfig.json)
 
 ### Imports
-- Use named imports where possible: `import { Agent } from "@mariozechner/pi-agent-core"`
-- Use type-only imports for types: `import type { AgentTool } from "@mariozechner/pi-agent-core"`
+- Use named imports where possible: `import { Agent } from "@mariozechner/pi-coding-agent"`
+- Use type-only imports for types: `import type { AgentEvent } from "@mariozechner/pi-agent-core"`
 - Group imports: external packages first, then local modules
 - Use `* as` namespace import for Node.js built-ins: `import * as fs from "fs"`
+- Always include `.js` extension for local imports: `import { WebsocketServer } from "./websocket-server.js"`
 
 ### Types
 - Use `Type.Object()` from pi-ai for tool parameter schemas
@@ -56,9 +57,10 @@ npx tsc --noEmit      # Type-check without emitting files
 - Use `unknown` type when catching errors, then narrow with `instanceof Error`
 
 ### Naming Conventions
-- **PascalCase** for types: `ReadFileParams`, `ListFilesParams`
+- **PascalCase** for types: `ReadFileParams`, `ClientMessage`
 - **camelCase** for variables, functions, and object keys
-- **SCREAMING_SNAKE_CASE** for constants (if needed)
+- **SCREAMING_SNAKE_CASE** for constants: `MAX_CONNECTIONS`
+- Prefix interfaces with descriptive names: `ClientMessage`
 - Descriptive names - avoid single letters except in loops
 
 ### Error Handling
@@ -71,11 +73,19 @@ npx tsc --noEmit      # Type-check without emitting files
   }
   ```
 - Return error details in tool response objects, not throw
+- For WebSocket: use `sendError` helper to send error messages to clients
 
 ### Functions
 - Use async/await for asynchronous operations
 - Keep functions focused and small (< 50 lines when possible)
 - Use function declarations or arrow functions consistently
+- Use generic types for reusable functions: `async function withRetry<T>(fn: () => Promise<T>)`
+
+### Classes
+- Use private fields for encapsulation: `private wss: WSServer | null`
+- Validate constructor parameters with early throws
+- Implement proper cleanup with `dispose()` or `stop()` methods
+- Use signal handlers for graceful shutdown
 
 ### Tool Implementation Pattern
 Follow this pattern for agent tools:
@@ -105,13 +115,15 @@ const tool: AgentTool<typeof toolParams> = {
 ## Environment Variables
 
 Required:
-- `LLM_BASE_URL` - Base URL for LLM API
-- `LLM_MODEL` - Model identifier
+- `LLM_BASE_URL` - Base URL for LLM API (e.g., http://localhost:11434/v1)
+- `LLM_MODEL` - Model identifier (e.g., llama3.1:8b)
 
 Optional:
 - `LLM_API` - API type (default: "openai-completions")
 - `OPENAI_API_KEY` - API key for authentication
 - `AGENT_PROMPT` - If set, runs single prompt instead of REPL
+- `WEBSOCKET_PORT` - Port for WebSocket server (default: 8080)
+- `WEBSOCKET_MODE` - If set, runs WebSocket server instead of REPL
 
 See `.env.example` for reference.
 
@@ -120,24 +132,36 @@ See `.env.example` for reference.
 ```
 /home/opencode/workspace/pi-agent-container/
 ├── src/
-│   └── agent.ts          # Main agent implementation
-├── dist/                 # Compiled JavaScript output
-├── workspace/
-│   └── AGENTS.md         # Agent instructions loaded at runtime
+│   ├── agent.ts              # Main agent implementation (REPL/prompt mode)
+│   └── websocket-server.ts   # WebSocket server for remote connections
+├── dist/                     # Compiled JavaScript output
+├── workspace/                # Agent instructions loaded at runtime
 ├── package.json
 ├── tsconfig.json
-└── Dockerfile
+└── .env.example
 ```
 
 ## Development Workflow
 
-1. Make changes in `src/agent.ts`
+1. Make changes in `src/agent.ts` or `src/websocket-server.ts`
 2. Run `npm run dev` to test changes
 3. Run `npm run build` before deploying
 4. Test the built version with `npm run start`
 
+## WebSocket Server Protocol
+
+When running in `WEBSOCKET_MODE`, clients can send messages:
+```typescript
+// Client message format
+{ type: "prompt", content: "your prompt here" }
+{ type: "disconnect" }
+
+// Server sends AgentEvent objects as JSON
+```
+
 ## Notes
 
-- The agent loads `workspace/AGENTS.md` at runtime as system prompt context
-- The codebase is small (~220 lines) - keep changes focused and minimal
+- The codebase is small (~320 lines combined) - keep changes focused and minimal
 - No linting or formatting tools are currently configured - manually ensure code consistency
+- The agent uses `createCodingTools` from pi-coding-agent for file system access
+- Session management supports both creating new sessions and continuing recent sessions
