@@ -8,7 +8,7 @@
     "dev": "tsx src/agent.ts"
   },
   "dependencies": {
-    "@mariozechner/pi-agent-core": "^0.55.3",
+    "@mariozechner/pi-coding-agent": "^0.55.3",
     "@mariozechner/pi-ai": "^0.55.3",
     "ws": "^8.19.0"
   },
