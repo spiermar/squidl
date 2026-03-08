@@ -92,7 +92,7 @@ function createStreamFn() {
 
 function loadAgentInstructions(): string {
   try {
-    return fs.readFileSync("AGENTS.md", "utf-8");
+    return fs.readFileSync("workspace/AGENTS.md", "utf-8");
   } catch {
     return "";
   }

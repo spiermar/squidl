@@ -17,7 +17,7 @@ COPY package*.json ./
 RUN npm install --omit=dev
 
 COPY --from=0 /app/dist ./dist
-COPY AGENTS.md ./
+COPY workspace ./workspace
 
 USER node
 
