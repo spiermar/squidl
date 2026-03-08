@@ -98,7 +98,7 @@ function loadAgentInstructions(): string {
   }
 }
 
-async function createAgent(): Promise<Agent> {
+export async function createAgent(): Promise<Agent> {
   const model = createModel();
   const streamFn = createStreamFn();
   const agentInstructions = loadAgentInstructions();
