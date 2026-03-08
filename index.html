@@ -1,0 +1,163 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>PI Agent REPL</title>
+  <script src="https://cdn.tailwindcss.com"></script>
+</head>
+<body class="bg-gray-900 text-gray-100 h-screen flex flex-col">
+  <header class="bg-gray-800 border-b border-gray-700 px-4 py-3 flex items-center justify-between">
+    <h1 class="text-lg font-semibold">PI Agent REPL</h1>
+    <div id="connection-status" class="flex items-center gap-2 text-sm">
+      <span class="w-2 h-2 rounded-full bg-red-500"></span>
+      <span class="text-gray-400">Disconnected</span>
+    </div>
+  </header>
+
+  <main class="flex-1 overflow-hidden flex flex-col">
+    <div id="messages" class="flex-1 overflow-y-auto p-4 space-y-3">
+      <div class="text-center text-gray-500 text-sm mt-4">
+        Connected. Send a prompt to start the conversation.
+      </div>
+    </div>
+
+    <form id="prompt-form" class="border-t border-gray-700 p-4">
+      <div class="flex gap-2">
+        <input
+          type="text"
+          id="prompt-input"
+          class="flex-1 bg-gray-800 border border-gray-600 rounded-lg px-4 py-2 text-sm focus:outline-none focus:border-blue-500 placeholder-gray-500"
+          placeholder="Enter your prompt..."
+          disabled
+        >
+        <button
+          type="submit"
+          id="send-button"
+          class="bg-blue-600 hover:bg-blue-700 disabled:bg-gray-600 disabled:cursor-not-allowed px-4 py-2 rounded-lg text-sm font-medium transition-colors"
+          disabled
+        >
+          Send
+        </button>
+      </div>
+    </form>
+  </main>
+
+  <script>
+    const wsUrl = `ws://${window.location.hostname || 'localhost'}:8080`;
+    let ws = null;
+
+    const statusEl = document.getElementById('connection-status');
+    const messagesEl = document.getElementById('messages');
+    const promptForm = document.getElementById('prompt-form');
+    const promptInput = document.getElementById('prompt-input');
+    const sendButton = document.getElementById('send-button');
+
+    function updateConnectionStatus(connected) {
+      const dot = statusEl.querySelector('span:first-child');
+      const text = statusEl.querySelector('span:last-child');
+      
+      if (connected) {
+        dot.className = 'w-2 h-2 rounded-full bg-green-500';
+        text.textContent = 'Connected';
+        promptInput.disabled = false;
+        sendButton.disabled = false;
+      } else {
+        dot.className = 'w-2 h-2 rounded-full bg-red-500';
+        text.textContent = 'Disconnected';
+        promptInput.disabled = true;
+        sendButton.disabled = true;
+      }
+    }
+
+    function addMessage(content, isUser = false) {
+      const emptyMsg = messagesEl.querySelector('.text-center');
+      if (emptyMsg) emptyMsg.remove();
+
+      const messageEl = document.createElement('div');
+      messageEl.className = `flex ${isUser ? 'justify-end' : 'justify-start'}`;
+      
+      const bubble = document.createElement('div');
+      bubble.className = `max-w-[80%] rounded-lg px-4 py-2 text-sm ${
+        isUser 
+          ? 'bg-blue-600 text-white' 
+          : 'bg-gray-700 text-gray-100'
+      }`;
+      bubble.textContent = content;
+      
+      messageEl.appendChild(bubble);
+      messagesEl.appendChild(messageEl);
+      messagesEl.scrollTop = messagesEl.scrollHeight;
+    }
+
+    function addError(message) {
+      const errorEl = document.createElement('div');
+      errorEl.className = 'text-center text-red-400 text-sm py-2';
+      errorEl.textContent = `Error: ${message}`;
+      messagesEl.appendChild(errorEl);
+      messagesEl.scrollTop = messagesEl.scrollHeight;
+    }
+
+    function connect() {
+      ws = new WebSocket(wsUrl);
+
+      ws.onopen = () => {
+        updateConnectionStatus(true);
+        addMessage('Connected to agent', false);
+      };
+
+      ws.onmessage = (event) => {
+        try {
+          const data = JSON.parse(event.data);
+          
+          if (data.type === 'error') {
+            addError(data.message);
+            return;
+          }
+
+          let content = '';
+          if (data.content) {
+            if (Array.isArray(data.content)) {
+              content = data.content.map(c => c.text || JSON.stringify(c)).join('\n');
+            } else {
+              content = data.content;
+            }
+          }
+
+          if (content) {
+            addMessage(content, false);
+          }
+        } catch (err) {
+          addError('Failed to parse message');
+        }
+      };
+
+      ws.onclose = () => {
+        updateConnectionStatus(false);
+        addMessage('Disconnected from agent', false);
+      };
+
+      ws.onerror = () => {
+        addError('WebSocket error');
+      };
+    }
+
+    promptForm.addEventListener('submit', (e) => {
+      e.preventDefault();
+      const content = promptInput.value.trim();
+      if (!content || !ws || ws.readyState !== WebSocket.OPEN) return;
+
+      addMessage(content, true);
+      
+      ws.send(JSON.stringify({
+        type: 'prompt',
+        content: content
+      }));
+
+      promptInput.value = '';
+    });
+
+    connect();
+  </script>
+</body>
+</html>
