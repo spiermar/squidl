@@ -7,11 +7,17 @@ interface ClientMessage {
   content?: string;
 }
 
+const MAX_CONNECTIONS = 10;
+
 export class WebsocketServer {
   private wss: WSServer | null = null;
   private port: number;
+  private connectionCount = 0;
 
   constructor(port: number = 8080) {
+    if (typeof port !== "number" || port < 1 || port > 65535 || !Number.isInteger(port)) {
+      throw new Error(`Invalid port: ${port}. Must be an integer between 1 and 65535.`);
+    }
     this.port = port;
   }
 
@@ -35,21 +41,52 @@ export class WebsocketServer {
   }
 
   private async handleConnection(ws: WebSocket): Promise<void> {
+    if (this.connectionCount >= MAX_CONNECTIONS) {
+      this.sendError(ws, "Connection limit exceeded. Please try again later.");
+      ws.close();
+      return;
+    }
+
+    this.connectionCount++;
     console.log("Client connected");
 
-    const agent = await createAgent();
     const agentId = Math.random().toString(36).slice(2, 9);
+    let agent: Agent;
+    let unsubscribe: (() => void) | undefined;
 
-    agent.subscribe((event: AgentEvent) => {
-      this.sendEvent(ws, event);
-    });
+    try {
+      agent = await createAgent();
+    } catch (err) {
+      const message = err instanceof Error ? err.message : String(err);
+      this.sendError(ws, `Failed to create agent: ${message}`);
+      ws.close();
+      return;
+    }
+
+    try {
+      unsubscribe = agent.subscribe((event: AgentEvent) => {
+        this.sendEvent(ws, event);
+      });
+    } catch (err) {
+      const message = err instanceof Error ? err.message : String(err);
+      console.error(`Failed to subscribe to agent ${agentId}: ${message}`);
+    }
 
     ws.on("message", (data: Buffer) => {
       this.handleMessage(ws, data.toString(), agent);
     });
 
     ws.on("close", () => {
+      this.connectionCount--;
       console.log(`Client disconnected (agent ${agentId})`);
+      if (unsubscribe) {
+        unsubscribe();
+      }
+      if (typeof (agent as any).dispose === "function") {
+        (agent as any).dispose();
+      } else {
+        console.log(`Agent ${agentId} orphaned for garbage collection`);
+      }
     });
 
     ws.on("error", (err: Error) => {
