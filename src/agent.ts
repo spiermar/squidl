@@ -90,16 +90,27 @@ function createStreamFn() {
   };
 }
 
+function loadAgentInstructions(): string {
+  try {
+    return fs.readFileSync("AGENTS.md", "utf-8");
+  } catch {
+    return "";
+  }
+}
+
 async function createAgent(): Promise<Agent> {
   const model = createModel();
   const streamFn = createStreamFn();
+  const agentInstructions = loadAgentInstructions();
+  const basePrompt = "You are a helpful assistant with access to file tools. Be concise.";
+  const systemPrompt = agentInstructions ? `${basePrompt}\n\n${agentInstructions}` : basePrompt;
   
   const agent = new Agent({
     initialState: {
-      systemPrompt: "You are a helpful assistant with access to file tools. Be concise.",
+      systemPrompt,
       model,
       tools: [readFileTool, listFilesTool],
-      thinkingLevel: "medium", // "off" | "minimal" | "low" | "medium" | "high" | "xhigh"
+      thinkingLevel: "medium",
     },
     streamFn,
   });
