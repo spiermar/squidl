@@ -1,94 +1,16 @@
-import { Agent } from "@mariozechner/pi-agent-core";
-import { streamSimple, Type, Static } from "@mariozechner/pi-ai";
+import { createAgentSession, SessionManager, createCodingTools, DefaultResourceLoader } from "@mariozechner/pi-coding-agent";
+import { getModel, streamSimple, Type, Static } from "@mariozechner/pi-ai";
 import * as fs from "fs";
 import * as readline from "readline";
+import * as path from "path";
 import { WebsocketServer } from "./websocket-server.js";
 import type { AgentTool } from "@mariozechner/pi-agent-core";
 import type { Model } from "@mariozechner/pi-ai";
-import type { Context, AssistantMessage } from "@mariozechner/pi-ai";
 
-const readFileParams = Type.Object({
-  path: Type.String({ description: "Path to the file" }),
-});
-
-type ReadFileParams = Static<typeof readFileParams>;
-
-const readFileTool: AgentTool<typeof readFileParams> = {
-  name: "read_file",
-  label: "Read File",
-  description: "Read the contents of a file",
-  parameters: readFileParams,
-  execute: async (_id, params: ReadFileParams) => {
-    try {
-      const content = fs.readFileSync(params.path, "utf-8");
-      return { content: [{ type: "text", text: content }], details: {} };
-    } catch (err: unknown) {
-      const message = err instanceof Error ? err.message : String(err);
-      return { content: [{ type: "text", text: `Error: ${message}` }], details: { error: message } };
-    }
-  },
-};
-
-const listFilesParams = Type.Object({
-  path: Type.String({ description: "Directory path", default: "." }),
-});
-
-type ListFilesParams = Static<typeof listFilesParams>;
-
-const listFilesTool: AgentTool<typeof listFilesParams> = {
-  name: "list_files",
-  label: "List Files",
-  description: "List files in a directory",
-  parameters: listFilesParams,
-  execute: async (_id, params: ListFilesParams) => {
-    try {
-      const files = fs.readdirSync(params.path);
-      return { content: [{ type: "text", text: files.join("\n") }], details: { count: files.length } };
-    } catch (err: unknown) {
-      const message = err instanceof Error ? err.message : String(err);
-      return { content: [{ type: "text", text: `Error: ${message}` }], details: { error: message } };
-    }
-  },
-};
-
-function validateEnv(): void {
-  const required = ["LLM_BASE_URL", "LLM_MODEL"];
-  const missing = required.filter((key) => !process.env[key]?.trim());
-  
-  if (missing.length > 0) {
-    console.error(`Error: Missing required environment variables: ${missing.join(", ")}`);
-    process.exit(1);
-  }
-}
-
-function createModel(): Model<"openai-completions"> {
-  const baseUrl = process.env.LLM_BASE_URL!;
-  const modelId = process.env.LLM_MODEL!;
-  const api = process.env.LLM_API || "openai-completions";
-
-  return {
-    id: modelId,
-    name: modelId,
-    api: api as "openai-completions",
-    provider: "custom",
-    baseUrl,
-    reasoning: true,
-    input: ["text"],
-    cost: { input: 0, output: 0, cacheRead: 0, cacheWrite: 0 },
-    contextWindow: 202752,
-    maxTokens: 8192,
-  };
-}
-
-function createStreamFn() {
-  const apiKey = process.env.LLM_API_KEY;
-  
-  return (model: any, context: any, options?: any) => {
-    return streamSimple(model, context, {
-      ...options,
-      ...(apiKey && { apiKey }),
-    });
-  };
+function getSessionFile(): string {
+  const sessionDir = path.join(process.cwd(), ".sessions");
+  fs.mkdirSync(sessionDir, { recursive: true });
+  return path.join(sessionDir, "agent.jsonl");
 }
 
 function loadAgentInstructions(): string {
@@ -99,24 +21,62 @@ function loadAgentInstructions(): string {
   }
 }
 
-export async function createAgent(): Promise<Agent> {
+function createModel(): Model<any> {
+  const baseUrl = process.env.LLM_BASE_URL;
+  const modelId = process.env.LLM_MODEL;
+  const api = process.env.LLM_API;
+
+  if (baseUrl && modelId) {
+    return {
+      id: modelId,
+      name: modelId,
+      api: (api || "openai-completions") as "openai-completions",
+      provider: "custom",
+      baseUrl,
+      reasoning: true,
+      input: ["text"] as const,
+      cost: { input: 0, output: 0, cacheRead: 0, cacheWrite: 0 },
+      contextWindow: 202752,
+      maxTokens: 8192,
+    };
+  }
+
+  return getModel("anthropic", "claude-sonnet-4-20250514");
+}
+
+export async function createAgent(): Promise<any> {
+  const sessionManager = SessionManager.create(process.cwd());
+  return createSession(sessionManager);
+}
+
+export async function createSession(sessionManager: any) {
   const model = createModel();
-  const streamFn = createStreamFn();
   const agentInstructions = loadAgentInstructions();
   const basePrompt = "You are a helpful assistant with access to file tools. Be concise.";
   const systemPrompt = agentInstructions ? `${basePrompt}\n\n${agentInstructions}` : basePrompt;
-  
-  const agent = new Agent({
-    initialState: {
-      systemPrompt,
-      model,
-      tools: [readFileTool, listFilesTool],
-      thinkingLevel: "medium",
-    },
-    streamFn,
+
+  const resourceLoader = new DefaultResourceLoader({
+    cwd: process.cwd(),
+    systemPrompt,
   });
 
-  agent.subscribe((event) => {
+  const { session } = await createAgentSession({
+    model,
+    thinkingLevel: "medium",
+    sessionManager,
+    tools: createCodingTools(process.cwd()),
+    resourceLoader,
+  });
+
+  const apiKey = process.env.LLM_API_KEY;
+  session.agent.streamFn = (model: any, context: any, options?: any) => {
+    return streamSimple(model, context, {
+      ...options,
+      ...(apiKey && { apiKey }),
+    });
+  };
+
+  session.subscribe((event) => {
     if (event.type === "agent_start") {
       console.log("\nAgent started");
     }
@@ -134,7 +94,7 @@ export async function createAgent(): Promise<Agent> {
     }
   });
 
-  return agent;
+  return session;
 }
 
 async function withRetry<T>(fn: () => Promise<T>, maxRetries = 3): Promise<T> {
@@ -159,13 +119,15 @@ async function withRetry<T>(fn: () => Promise<T>, maxRetries = 3): Promise<T> {
 }
 
 async function runPrompt(prompt: string): Promise<void> {
-  const agent = await createAgent();
-  await withRetry(() => agent.prompt(prompt));
+  const sessionManager = SessionManager.create(process.cwd());
+  const session = await createSession(sessionManager);
+  await withRetry(() => session.prompt(prompt));
   console.log();
 }
 
 async function runRepl(): Promise<void> {
-  const agent = await createAgent();
+  const sessionManager = SessionManager.continueRecent(process.cwd());
+  const session = await createSession(sessionManager);
   
   const rl = readline.createInterface({
     input: process.stdin,
@@ -173,6 +135,7 @@ async function runRepl(): Promise<void> {
   });
 
   const cleanup = () => {
+    session.dispose();
     rl.close();
   };
 
@@ -193,7 +156,7 @@ async function runRepl(): Promise<void> {
         return;
       }
       try {
-        await withRetry(() => agent.prompt(trimmed));
+        await withRetry(() => session.prompt(trimmed));
       } catch (err: unknown) {
         const message = err instanceof Error ? err.message : String(err);
         console.error(`Error: ${message}`);
@@ -221,8 +184,6 @@ async function runWebsocketServer(): Promise<void> {
 }
 
 async function main() {
-  validateEnv();
-
   const prompt = process.env.AGENT_PROMPT;
   const websocketMode = process.env.WEBSOCKET_MODE;
 
