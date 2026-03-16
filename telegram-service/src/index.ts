@@ -15,7 +15,7 @@ if (!token) {
   throw new Error("TELEGRAM_BOT_TOKEN environment variable is required")
 }
 
-const bot = new Bot(token)
+const bot = new Bot(token as string)
 const agentUrl = process.env.AGENT_API_URL || "http://localhost:8888"
 
 const userSessions = new Map<number, string>()
@@ -25,7 +25,7 @@ bot.on("message:text", async (ctx: Context) => {
   if (!userId || typeof userId !== "number") return
 
   const message = ctx.msg
-  if (!("text" in message) || !message.text) return
+  if (!message || !("text" in message) || !message.text) return
   const text = message.text
 
   let sessionId = userSessions.get(userId)
