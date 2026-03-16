@@ -1,7 +1,10 @@
 import { Bot, Context } from "grammy"
+import express, { Request, Response } from "express"
 import * as process from "process"
 import { AgentHttpClient } from "./http-client.js"
 import { SessionStore } from "./session-store.js"
+
+const webhookUrl = process.env.WEBHOOK_URL
 
 const token = process.env.TELEGRAM_BOT_TOKEN
 if (!token) {
@@ -49,7 +52,24 @@ bot.on("message:text", async (ctx: Context) => {
   }
 })
 
-bot.start()
+if (webhookUrl) {
+  const webhookPath = webhookUrl + "/webhook"
+  await bot.api.setWebhook(webhookPath)
+
+  const app = express()
+  app.use(express.json())
+
+  app.post("/webhook", async (req: Request, res: Response) => {
+    await bot.handleUpdate(req.body)
+    res.send("OK")
+  })
+
+  app.listen(3000, () => {
+    console.log(`Webhook server listening on port 3000`)
+  })
+} else {
+  bot.start()
+}
 
 async function shutdown(signal: string) {
   console.log(`Received ${signal}, shutting down gracefully...`)
