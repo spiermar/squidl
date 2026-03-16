@@ -1,4 +1,5 @@
 import * as process from "process"
+import type { AgentHttpClient } from "./http-client.js"
 
 export interface UserSession {
   userId: number
@@ -35,7 +36,7 @@ export class SessionStore {
     this.sessions.delete(userId)
   }
 
-  startCleanup(agentClient: any, intervalMs = 60000): void {
+  startCleanup(agentClient: AgentHttpClient, intervalMs = 60000): void {
     this.cleanupInterval = setInterval(async () => {
       const now = new Date()
       for (const [userId, session] of this.sessions) {
