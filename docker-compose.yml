@@ -35,3 +35,8 @@ services:
       - ./Caddyfile:/etc/caddy/Caddyfile
     depends_on:
       - telegram
+
+  static-frontend:
+    build: ./frontend-service
+    ports:
+      - "8080:80"
