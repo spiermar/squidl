@@ -29,26 +29,29 @@ function createModel(): Model<any> {
   return getModel("anthropic", "claude-sonnet-4-20250514");
 }
 
-export async function createAgent(): Promise<any> {
-  const sessionManager = SessionManager.create(process.cwd());
-  return createSession(sessionManager);
-}
-
-export async function createSession(sessionManager: any) {
+export async function createAgent() {
   const model = createModel();
-  const systemPrompt = "You are a helpful assistant with access to file tools. Be concise.";
 
   const resourceLoader = new DefaultResourceLoader({
     cwd: process.cwd(),
-    systemPrompt,
+    systemPromptOverride: () => `You are a helpful assistant that speaks like a pirate. Always end responses with "Arrr!"`,
   });
+  await resourceLoader.reload();
+
+  // Discover AGENTS.md files walking up from cwd
+  const discovered = resourceLoader.getAgentsFiles().agentsFiles;
+  console.log("Discovered context files:");
+  for (const file of discovered) {
+	  console.log(`  - ${file.path} (${file.content.length} chars)`);
+  }
 
   const { session } = await createAgentSession({
+    cwd: process.cwd(),
     model,
     thinkingLevel: "medium",
-    sessionManager,
     tools: createCodingTools(process.cwd()),
-    resourceLoader,
+    resourceLoader: resourceLoader,
+    sessionManager: SessionManager.inMemory(),
   });
 
   const apiKey = process.env.OPENAI_API_KEY;
@@ -102,15 +105,13 @@ async function withRetry<T>(fn: () => Promise<T>, maxRetries = 3): Promise<T> {
 }
 
 async function runPrompt(prompt: string): Promise<void> {
-  const sessionManager = SessionManager.create(process.cwd());
-  const session = await createSession(sessionManager);
+  const session = await createAgent();
   await withRetry(() => session.prompt(prompt));
   console.log();
 }
 
 async function runRepl(): Promise<void> {
-  const sessionManager = SessionManager.continueRecent(process.cwd());
-  const session = await createSession(sessionManager);
+  const session = await createAgent();
   
   const rl = readline.createInterface({
     input: process.stdin,
