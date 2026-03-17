@@ -4,6 +4,7 @@ import * as fs from "fs";
 import * as readline from "readline";
 import * as path from "path";
 import { WebsocketServer } from "./websocket-server.js";
+import { startHttpServer } from "./http-server.js";
 import type { Model } from "@mariozechner/pi-ai";
 
 function createModel(): Model<any> {
@@ -167,11 +168,26 @@ async function runWebsocketServer(): Promise<void> {
   await server.start();
 }
 
+function runHttpServer(): void {
+  const port = parseInt(process.env.HTTP_PORT || "3000", 10);
+  startHttpServer(port);
+
+  const cleanup = () => {
+    process.exit(0);
+  };
+
+  process.on("SIGINT", cleanup);
+  process.on("SIGTERM", cleanup);
+}
+
 async function main() {
   const prompt = process.env.AGENT_PROMPT;
   const websocketMode = process.env.WEBSOCKET_MODE;
+  const httpMode = process.env.HTTP_MODE;
 
-  if (websocketMode) {
+  if (httpMode) {
+    runHttpServer();
+  } else if (websocketMode) {
     await runWebsocketServer();
   } else if (prompt) {
     await runPrompt(prompt);

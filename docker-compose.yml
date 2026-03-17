@@ -1,0 +1,37 @@
+services:
+  agent:
+    build: .
+    ports:
+      - "8888:8888"
+    environment:
+      - LLM_BASE_URL=${LLM_BASE_URL}
+      - LLM_MODEL=${LLM_MODEL}
+      - OPENAI_API_KEY=${OPENAI_API_KEY}
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8888/api/sessions"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+
+  telegram:
+    build: ./telegram-service
+    ports:
+      - "3000:3000"
+    depends_on:
+      agent:
+        condition: service_healthy
+    environment:
+      - TELEGRAM_BOT_TOKEN=${TELEGRAM_BOT_TOKEN}
+      - AGENT_API_URL=http://agent:8888
+      - WEBHOOK_URL=${WEBHOOK_URL}
+      - WEBHOOK_SECRET=${WEBHOOK_SECRET}
+
+  caddy:
+    image: caddy:2
+    ports:
+      - "80:80"
+      - "443:443"
+    volumes:
+      - ./Caddyfile:/etc/caddy/Caddyfile
+    depends_on:
+      - telegram
