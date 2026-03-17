@@ -1,8 +1,5 @@
 import { createAgentSession, SessionManager, createCodingTools, DefaultResourceLoader } from "@mariozechner/pi-coding-agent";
 import { getModel, streamSimple } from "@mariozechner/pi-ai";
-import * as fs from "fs";
-import * as readline from "readline";
-import * as path from "path";
 import { WebsocketServer } from "./websocket-server.js";
 import { startHttpServer } from "./http-server.js";
 import type { Model } from "@mariozechner/pi-ai";
@@ -84,76 +81,6 @@ export async function createAgent() {
   return session;
 }
 
-async function withRetry<T>(fn: () => Promise<T>, maxRetries = 3): Promise<T> {
-  let lastError: Error | undefined;
-  
-  for (let attempt = 1; attempt <= maxRetries; attempt++) {
-    try {
-      return await fn();
-    } catch (err) {
-      lastError = err instanceof Error ? err : new Error(String(err));
-      console.error(`Attempt ${attempt}/${maxRetries} failed: ${lastError.message}`);
-      
-      if (attempt < maxRetries) {
-        const delay = Math.pow(2, attempt) * 1000;
-        console.log(`Retrying in ${delay}ms...`);
-        await new Promise(resolve => setTimeout(resolve, delay));
-      }
-    }
-  }
-  
-  throw lastError || new Error("Operation failed after retries");
-}
-
-async function runPrompt(prompt: string): Promise<void> {
-  const session = await createAgent();
-  await withRetry(() => session.prompt(prompt));
-  console.log();
-}
-
-async function runRepl(): Promise<void> {
-  const session = await createAgent();
-  
-  const rl = readline.createInterface({
-    input: process.stdin,
-    output: process.stdout,
-  });
-
-  const cleanup = () => {
-    session.dispose();
-    rl.close();
-  };
-
-  process.on("SIGINT", cleanup);
-  process.on("SIGTERM", cleanup);
-
-  console.log("PI Agent REPL (type 'exit' to quit)\n");
-
-  const ask = () => {
-    rl.question("You: ", async (input) => {
-      const trimmed = input.trim();
-      if (trimmed === "exit") {
-        cleanup();
-        return;
-      }
-      if (!trimmed) {
-        ask();
-        return;
-      }
-      try {
-        await withRetry(() => session.prompt(trimmed));
-      } catch (err: unknown) {
-        const message = err instanceof Error ? err.message : String(err);
-        console.error(`Error: ${message}`);
-      }
-      console.log();
-      ask();
-    });
-  };
-
-  ask();
-}
-
 async function runWebsocketServer(): Promise<void> {
   const port = parseInt(process.env.WEBSOCKET_PORT || "8888", 10);
   const server = new WebsocketServer(port);
@@ -181,18 +108,13 @@ function runHttpServer(): void {
 }
 
 async function main() {
-  const prompt = process.env.AGENT_PROMPT;
   const websocketMode = process.env.WEBSOCKET_MODE;
   const httpMode = process.env.HTTP_MODE;
 
   if (httpMode) {
     runHttpServer();
-  } else if (websocketMode) {
-    await runWebsocketServer();
-  } else if (prompt) {
-    await runPrompt(prompt);
   } else {
-    await runRepl();
+    await runWebsocketServer();
   }
 }
 

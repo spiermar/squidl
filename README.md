@@ -1,6 +1,6 @@
 # PI Agent Container
 
-A TypeScript-based PI Agent container providing an AI agent with file system tools. Runs as a REPL or processes prompts from environment variables.
+A TypeScript-based PI Agent container providing an AI agent with file system tools. Runs as a WebSocket server or HTTP server.
 
 ## Prerequisites
 
@@ -15,9 +15,9 @@ A TypeScript-based PI Agent container providing an AI agent with file system too
 | `LLM_MODEL` | Yes | Model identifier |
 | `LLM_API` | No | API type (default: "openai-completions") |
 | `OPENAI_API_KEY` | No | API key for authentication |
-| `AGENT_PROMPT` | No | If set, runs single prompt instead of REPL |
-| `WEBSOCKET_MODE` | No | If set, runs WebSocket server instead of REPL |
 | `WEBSOCKET_PORT` | No | Port for WebSocket server (default: 8888) |
+| `HTTP_PORT` | No | Port for HTTP server (default: 3000) |
+| `HTTP_MODE` | No | If set, runs HTTP server instead of WebSocket server |
 
 ## Build the Container
 
@@ -27,34 +27,7 @@ docker build -t pi-agent .
 
 ## Run the Container
 
-### REPL Mode (Interactive)
-
-Run in interactive REPL mode:
-
-```bash
-docker run -it --rm \
-  -e LLM_BASE_URL=http://host.docker.internal:11434/v1 \
-  -e LLM_MODEL=llama3 \
-  -e OPENAI_API_KEY=ollama \
-  -v $(pwd)/workspace:/app/workspace \
-  pi-agent
-```
-
-### AGENT_PROMPT Mode
-
-Run a single prompt and exit:
-
-```bash
-docker run --rm \
-  -e LLM_BASE_URL=http://host.docker.internal:11434/v1 \
-  -e LLM_MODEL=llama3 \
-  -e OPENAI_API_KEY=ollama \
-  -e AGENT_PROMPT="List files in the current directory" \
-  -v $(pwd)/workspace:/app/workspace \
-  pi-agent
-```
-
-### WebSocket Mode
+### WebSocket Mode (Default)
 
 Run the WebSocket server to accept connections:
 
@@ -63,13 +36,27 @@ docker run --rm \
   -e LLM_BASE_URL=http://host.docker.internal:11434/v1 \
   -e LLM_MODEL=llama3 \
   -e OPENAI_API_KEY=ollama \
-  -e WEBSOCKET_MODE=true \
   -p 8888:8888 \
   -v $(pwd)/workspace:/app/workspace \
   pi-agent
 ```
 
 Connect to `ws://localhost:8888` to interact with the agent via WebSocket.
+
+### HTTP Mode
+
+Run the HTTP server:
+
+```bash
+docker run --rm \
+  -e LLM_BASE_URL=http://host.docker.internal:11434/v1 \
+  -e LLM_MODEL=llama3 \
+  -e OPENAI_API_KEY=ollama \
+  -e HTTP_MODE=true \
+  -p 3000:3000 \
+  -v $(pwd)/workspace:/app/workspace \
+  pi-agent
+```
 
 ## Volume Mount
 

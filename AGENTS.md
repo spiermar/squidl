@@ -4,7 +4,7 @@ This file provides instructions for agentic coding agents operating in this repo
 
 ## Project Overview
 
-This is a TypeScript-based PI Agent container that provides an AI agent with file system tools. The agent runs as a REPL, processes prompts from environment variables, or can run as a WebSocket server for remote connections.
+This is a TypeScript-based PI Agent container that provides an AI agent with file system tools. The agent runs as a WebSocket server for remote connections or an HTTP server.
 
 ## Build, Lint, and Test Commands
 
@@ -121,9 +121,9 @@ Required:
 Optional:
 - `LLM_API` - API type (default: "openai-completions")
 - `OPENAI_API_KEY` - API key for authentication
-- `AGENT_PROMPT` - If set, runs single prompt instead of REPL
 - `WEBSOCKET_PORT` - Port for WebSocket server (default: 8888)
-- `WEBSOCKET_MODE` - If set, runs WebSocket server instead of REPL
+- `HTTP_PORT` - Port for HTTP server (default: 3000)
+- `HTTP_MODE` - If set, runs HTTP server instead of WebSocket server
 
 See `.env.example` for reference.
 
@@ -132,7 +132,7 @@ See `.env.example` for reference.
 ```
 /home/opencode/workspace/pi-agent-container/
 ├── src/
-│   ├── agent.ts              # Main agent implementation (REPL/prompt mode)
+│   ├── agent.ts              # Main agent implementation
 │   └── websocket-server.ts   # WebSocket server for remote connections
 ├── dist/                     # Compiled JavaScript output
 ├── workspace/                # Agent instructions loaded at runtime
