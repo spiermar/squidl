@@ -154,19 +154,44 @@ describe('dual runtime startup and shutdown', () => {
 
       const createSessionResponse = await httpRequest('POST', httpPort, '/api/sessions', {})
       expect(createSessionResponse.status).toBe(200)
-      const sessionId = String((createSessionResponse.body as { sessionId: string }).sessionId)
-      expect(sessionId.length).toBeGreaterThan(0)
+      const firstSessionId = String((createSessionResponse.body as { sessionId: string }).sessionId)
+      expect(firstSessionId.length).toBeGreaterThan(0)
+
+      const firstSessionBeforeWebSocket = await httpRequest('GET', httpPort, `/api/sessions/${firstSessionId}`)
+      expect(firstSessionBeforeWebSocket.status).toBe(200)
 
       const ws = await connectWebSocket(websocketPort)
-      ws.send(JSON.stringify({ type: 'disconnect' }))
+      ws.close()
       await waitForWebSocketClose(ws)
 
-      const getSessionResponse = await httpRequest('GET', httpPort, `/api/sessions/${sessionId}`)
-      expect(getSessionResponse.status).toBe(200)
+      const firstSessionAfterWebSocket = await httpRequest('GET', httpPort, `/api/sessions/${firstSessionId}`)
+      expect(firstSessionAfterWebSocket.status).toBe(200)
 
-      const deleteSessionResponse = await httpRequest('DELETE', httpPort, `/api/sessions/${sessionId}`)
-      expect(deleteSessionResponse.status).toBe(200)
-      expect((deleteSessionResponse.body as { success: boolean }).success).toBe(true)
+      const secondSessionResponse = await httpRequest('POST', httpPort, '/api/sessions', {})
+      expect(secondSessionResponse.status).toBe(200)
+      const secondSessionId = String((secondSessionResponse.body as { sessionId: string }).sessionId)
+      expect(secondSessionId.length).toBeGreaterThan(0)
+      expect(secondSessionId).not.toBe(firstSessionId)
+
+      const secondSessionAfterWebSocket = await httpRequest('GET', httpPort, `/api/sessions/${secondSessionId}`)
+      expect(secondSessionAfterWebSocket.status).toBe(200)
+
+      const deleteFirstSessionResponse = await httpRequest('DELETE', httpPort, `/api/sessions/${firstSessionId}`)
+      expect(deleteFirstSessionResponse.status).toBe(200)
+      expect((deleteFirstSessionResponse.body as { success: boolean }).success).toBe(true)
+
+      const deletedFirstSessionResponse = await httpRequest('GET', httpPort, `/api/sessions/${firstSessionId}`)
+      expect(deletedFirstSessionResponse.status).toBe(404)
+
+      const secondSessionStillPresent = await httpRequest('GET', httpPort, `/api/sessions/${secondSessionId}`)
+      expect(secondSessionStillPresent.status).toBe(200)
+
+      const deleteSecondSessionResponse = await httpRequest('DELETE', httpPort, `/api/sessions/${secondSessionId}`)
+      expect(deleteSecondSessionResponse.status).toBe(200)
+      expect((deleteSecondSessionResponse.body as { success: boolean }).success).toBe(true)
+
+      const deletedSecondSessionResponse = await httpRequest('GET', httpPort, `/api/sessions/${secondSessionId}`)
+      expect(deletedSecondSessionResponse.status).toBe(404)
     },
     TEST_TIMEOUT
   )
