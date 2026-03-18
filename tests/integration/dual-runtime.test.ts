@@ -20,6 +20,7 @@ type ExitResult = {
 const WORKDIR = process.cwd()
 const TEST_TIMEOUT = 30_000
 const DEFAULT_WAIT_TIMEOUT = 10_000
+const WEBSOCKET_STABILITY_TIMEOUT = 1_000
 
 const runtimeProcesses = new Set<RuntimeProcess>()
 const blockingServers = new Set<Server>()
@@ -180,7 +181,9 @@ describe('dual runtime startup and shutdown', () => {
       expect(secondCreateResponse.status).toBe(200)
       const secondSessionId = String((secondCreateResponse.body as { sessionId: string }).sessionId)
       expect(secondSessionId.length).toBeGreaterThan(0)
-      expect(secondSessionId).not.toBe(firstSessionId)
+
+      const firstGetAfterSecondCreate = await httpRequest('GET', httpPort, `/api/sessions/${firstSessionId}`)
+      expect(firstGetAfterSecondCreate.status).toBe(404)
 
       const secondGetAfterWebSocketClose = await httpRequest('GET', httpPort, `/api/sessions/${secondSessionId}`)
       expect(secondGetAfterWebSocketClose.status).toBe(200)
@@ -387,14 +390,23 @@ async function waitForWebSocketClose(ws: WebSocket, timeoutMs = DEFAULT_WAIT_TIM
   })
 }
 
-async function assertWebSocketRemainsOpen(ws: WebSocket, settleMs = 300): Promise<void> {
+async function assertWebSocketRemainsOpen(
+  ws: WebSocket,
+  stabilityTimeoutMs = WEBSOCKET_STABILITY_TIMEOUT
+): Promise<void> {
   expect(ws.readyState).toBe(WebSocket.OPEN)
 
+  await raceWebSocketFailureAgainstTimeout(ws, stabilityTimeoutMs)
+
+  expect(ws.readyState).toBe(WebSocket.OPEN)
+}
+
+async function raceWebSocketFailureAgainstTimeout(ws: WebSocket, timeoutMs: number): Promise<void> {
   await new Promise<void>((resolve, reject) => {
     const timeout = setTimeout(() => {
       cleanup()
       resolve()
-    }, settleMs)
+    }, timeoutMs)
 
     const onClose = () => {
       cleanup()
@@ -412,11 +424,9 @@ async function assertWebSocketRemainsOpen(ws: WebSocket, settleMs = 300): Promis
       ws.off('error', onError)
     }
 
-    ws.on('close', onClose)
-    ws.on('error', onError)
+    ws.once('close', onClose)
+    ws.once('error', onError)
   })
-
-  expect(ws.readyState).toBe(WebSocket.OPEN)
 }
 
 async function closeWebSocket(ws: WebSocket): Promise<void> {
