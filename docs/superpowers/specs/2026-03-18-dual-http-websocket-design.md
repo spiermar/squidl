@@ -70,7 +70,7 @@ Single process, dual listener startup:
 1. Parse ports (`HTTP_PORT`, `WEBSOCKET_PORT`) with current defaults (`3000`, `8888`)
 2. Create WebSocket server instance
 3. Start HTTP and WebSocket servers concurrently
-4. If either startup fails, log and exit non-zero
+4. If either startup fails, trigger startup cleanup for any listener that already started, then exit non-zero
 5. On SIGINT/SIGTERM, gracefully stop both servers, then exit
 
 ## Component Design
@@ -85,7 +85,10 @@ Single process, dual listener startup:
 ### `src/http-server.ts`
 
 - Keep existing routes and HTTP session map unchanged
-- Return created `http.Server` from `startHttpServer(port)` so caller can close it during coordinated shutdown
+- Replace fire-and-forget startup with a startup contract that is fail-fast aware:
+  - `startHttpServer(port)` returns a Promise that resolves only when the HTTP server emits `listening`
+  - the Promise rejects on startup `error` events (including `EADDRINUSE`)
+  - on success, the resolved value includes the created `http.Server` for coordinated shutdown
 
 ### `src/websocket-server.ts`
 
@@ -118,7 +121,8 @@ Both flows run concurrently in process, but state does not cross boundaries.
 
 Startup errors:
 - If either listener fails to bind (e.g., `EADDRINUSE`), startup is considered failed
-- Process exits with non-zero status (fail-fast)
+- On startup failure, orchestrator attempts to stop any listener that already started successfully
+- Process exits with non-zero status after cleanup attempt (fail-fast)
 
 Runtime errors:
 - Keep current protocol-local error handling in HTTP routes and WebSocket handlers
@@ -133,6 +137,18 @@ Shutdown errors:
 Build and type safety:
 - `npm run build`
 
+Automated runtime checks:
+1. Add process-level integration tests for startup behavior:
+   - app starts both listeners on each launch
+   - `HTTP_MODE` and `WEBSOCKET_MODE` are ignored
+   - one-port bind failure returns non-zero exit code
+   - SIGINT/SIGTERM shuts down both listeners cleanly
+
+2. Recommended implementation style for these tests:
+   - spawn the built app as a child process with controlled env and ports
+   - probe listeners using HTTP and WebSocket clients
+   - assert exit codes and shutdown behavior
+
 Manual smoke checks:
 1. Start app and verify both ports are listening
 2. Exercise HTTP session create/prompt/delete
@@ -145,6 +161,7 @@ Manual smoke checks:
 - App starts both HTTP and WebSocket listeners on every launch by default
 - `HTTP_MODE` and `WEBSOCKET_MODE` no longer control startup behavior
 - If either server fails at startup, process exits with non-zero code
+- If either server fails during startup, any already-started listener is shut down before process exit
 - HTTP and WebSocket sessions remain separate and independent
 - SIGINT/SIGTERM triggers graceful stop for both listeners
 
