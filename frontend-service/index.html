@@ -44,7 +44,8 @@
   </main>
 
   <script>
-    const wsUrl = `ws://${window.location.hostname || 'localhost'}:8888`;
+    const protocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
+    const wsUrl = `${protocol}//${window.location.hostname || 'localhost'}:8888`;
     let ws = null;
     let currentResponse = '';
 
