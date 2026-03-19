@@ -27,21 +27,16 @@ bot.on('message:text', async (ctx: Context) => {
   if (!message || !('text' in message) || !message.text) return
   const text = message.text
 
-  let sessionId = sessionStore.getOrCreate(userId, async () => {
-    const session = await agentClient.createSession()
-    return session.sessionId
-  })
-
-  if (!sessionId) {
-    try {
+  let sessionId: string
+  try {
+    sessionId = await sessionStore.getOrCreate(userId, async () => {
       const session = await agentClient.createSession()
-      sessionId = session.sessionId
-      sessionStore.set(userId, sessionId)
-    } catch (err: unknown) {
-      const errorMessage = err instanceof Error ? err.message : String(err)
-      await ctx.reply(`Failed to create session: ${errorMessage}`)
-      return
-    }
+      return session.sessionId
+    })
+  } catch (err: unknown) {
+    const errorMessage = err instanceof Error ? err.message : String(err)
+    await ctx.reply(`Failed to create session: ${errorMessage}`)
+    return
   }
 
   try {
