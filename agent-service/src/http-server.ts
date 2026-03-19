@@ -8,6 +8,10 @@ app.use(express.json())
 
 const sessions = new Map<string, { session: any; createdAt: Date }>()
 
+app.get('/healthz', (_req: Request, res: Response) => {
+  res.json({ status: 'ok' })
+})
+
 app.post('/api/sessions', async (req: Request, res: Response) => {
   try {
     const sessionId = Math.random().toString(36).slice(2, 11)
