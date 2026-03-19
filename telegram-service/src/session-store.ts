@@ -14,22 +14,20 @@ export class SessionStore {
   private sessions = new Map<number, UserSession>()
   private cleanupInterval: ReturnType<typeof setInterval> | null = null
 
-  getOrCreate(userId: number, createFn: () => Promise<string>): string | null {
+  async getOrCreate(userId: number, createFn: () => Promise<string>): Promise<string> {
     const existing = this.sessions.get(userId)
     if (existing) {
       existing.lastActivity = new Date()
       return existing.sessionId
     }
-    return null
-  }
-
-  set(userId: number, sessionId: string): void {
+    const sessionId = await createFn()
     this.sessions.set(userId, {
       userId,
       sessionId,
       createdAt: new Date(),
       lastActivity: new Date(),
     })
+    return sessionId
   }
 
   delete(userId: number): void {
