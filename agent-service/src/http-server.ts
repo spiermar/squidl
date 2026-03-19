@@ -35,8 +35,20 @@ app.post('/api/sessions/:id/prompt', async (req: Request, res: Response) => {
       return res.status(404).json({ error: 'Session not found' })
     }
 
-    await sessionData.session.prompt(prompt)
-    res.json({ status: 'completed', events: [] })
+    let result = ''
+    const unsubscribe = sessionData.session.subscribe((event: any) => {
+      if (event.type === 'message_update' && event.assistantMessageEvent?.type === 'text_delta') {
+        result += event.assistantMessageEvent.delta
+      }
+    })
+
+    try {
+      await sessionData.session.prompt(prompt)
+    } finally {
+      unsubscribe()
+    }
+
+    res.json({ status: 'completed', result })
   } catch (err: unknown) {
     const message = err instanceof Error ? err.message : String(err)
     res.status(500).json({ error: message })
