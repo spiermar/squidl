@@ -8,6 +8,10 @@
     "outDir": "dist",
     "rootDir": "src"
   },
+<<<<<<< fix/issue-8-http-prompt-response
   "include": ["src"],
   "exclude": ["node_modules", "dist", "tests"]
+=======
+  "include": ["src"]
+>>>>>>> master
 }
