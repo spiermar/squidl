@@ -4,6 +4,11 @@ import { WebsocketServer } from "./websocket-server.js";
 import { startHttpServer } from "./http-server.js";
 import type { Model } from "@mariozechner/pi-ai";
 
+type RuntimeListener = {
+  name: string
+  stop: () => Promise<void>
+}
+
 function createModel(): Model<any> {
   const baseUrl = process.env.LLM_BASE_URL;
   const modelId = process.env.LLM_MODEL;
@@ -28,6 +33,10 @@ function createModel(): Model<any> {
 }
 
 export async function createAgent() {
+  return createSession(SessionManager.inMemory())
+}
+
+export async function createSession(sessionManager: SessionManager) {
   const model = createModel();
 
   const resourceLoader = new DefaultResourceLoader({
@@ -49,7 +58,7 @@ export async function createAgent() {
     thinkingLevel: "medium",
     tools: createCodingTools(process.cwd()),
     resourceLoader: resourceLoader,
-    sessionManager: SessionManager.inMemory(),
+    sessionManager,
   });
 
   const apiKey = process.env.OPENAI_API_KEY;
@@ -81,40 +90,114 @@ export async function createAgent() {
   return session;
 }
 
-async function runWebsocketServer(): Promise<void> {
+async function startWebsocketListener(): Promise<RuntimeListener> {
   const port = parseInt(process.env.WEBSOCKET_PORT || "8888", 10);
   const server = new WebsocketServer(port);
-
-  const cleanup = () => {
-    server.stop().then(() => process.exit(0));
-  };
-
-  process.on("SIGINT", cleanup);
-  process.on("SIGTERM", cleanup);
-
   await server.start();
+
+  return {
+    name: 'websocket',
+    stop: async () => {
+      await server.stop()
+    },
+  }
 }
 
-function runHttpServer(): void {
+async function startHttpListener(): Promise<RuntimeListener> {
   const port = parseInt(process.env.HTTP_PORT || "3000", 10);
-  startHttpServer(port);
+  const server = await startHttpServer(port)
 
-  const cleanup = () => {
-    process.exit(0);
-  };
+  return {
+    name: 'http',
+    stop: async () => {
+      await new Promise<void>((resolve, reject) => {
+        server.close((err?: Error) => {
+          if (err) {
+            reject(err)
+            return
+          }
+          console.log('HTTP API server stopped')
+          resolve()
+        })
+      })
+    },
+  }
+}
 
-  process.on("SIGINT", cleanup);
-  process.on("SIGTERM", cleanup);
+async function stopListeners(listeners: RuntimeListener[]): Promise<void> {
+  await Promise.all(
+    listeners.map(async (listener) => {
+      try {
+        await listener.stop()
+      } catch (err: unknown) {
+        const message = err instanceof Error ? err.message : String(err)
+        console.error(`Failed to stop ${listener.name} listener: ${message}`)
+      }
+    })
+  )
+}
+
+function registerSignalCleanup(listeners: RuntimeListener[]): { isShuttingDown: () => boolean } {
+  let shuttingDown = false
+
+  const handleShutdown = async () => {
+    if (shuttingDown) {
+      return
+    }
+    shuttingDown = true
+
+    await stopListeners(listeners)
+    process.exit(0)
+  }
+
+  process.once('SIGINT', () => {
+    void handleShutdown()
+  })
+
+  process.once('SIGTERM', () => {
+    void handleShutdown()
+  })
+
+  return {
+    isShuttingDown: () => shuttingDown,
+  }
 }
 
 async function main() {
-  const websocketMode = process.env.WEBSOCKET_MODE;
-  const httpMode = process.env.HTTP_MODE;
+  const startedListeners: RuntimeListener[] = []
+  const signalCleanup = registerSignalCleanup(startedListeners)
 
-  if (httpMode) {
-    runHttpServer();
-  } else {
-    await runWebsocketServer();
+  const startup = await Promise.allSettled([
+    startHttpListener().then((listener) => {
+      startedListeners.push(listener)
+      return listener
+    }),
+    startWebsocketListener().then((listener) => {
+      startedListeners.push(listener)
+      return listener
+    }),
+  ])
+
+  const failures: string[] = []
+
+  for (const result of startup) {
+    if (result.status === 'fulfilled') {
+      continue
+    }
+
+    const message = result.reason instanceof Error ? result.reason.message : String(result.reason)
+    failures.push(message)
+  }
+
+  if (failures.length > 0) {
+    if (signalCleanup.isShuttingDown()) {
+      return
+    }
+
+    // Keep startup fail-fast semantics: if either listener fails, exit non-zero.
+    await stopListeners(startedListeners)
+    console.error(`Failed to start listeners: ${failures.join(' | ')}`)
+    process.exit(1)
   }
 }
 

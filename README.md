@@ -60,7 +60,7 @@ docker compose build
 | `LLM_API` | No | API type (default: "openai-completions") |
 | `OPENAI_API_KEY` | No | API key for authentication |
 | `WEBSOCKET_PORT` | No | Port for WebSocket server (default: 8888) |
-| `HTTP_MODE` | No | If set, runs HTTP server instead of WebSocket |
+| `HTTP_PORT` | No | Port for HTTP server (default: 3000) |
 
 ### Telegram Service
 
