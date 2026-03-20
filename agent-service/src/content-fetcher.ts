@@ -2,7 +2,6 @@ import type { FetchedContent, FetchError } from './web-tools.js'
 import { Readability } from '@mozilla/readability'
 import TurndownService from 'turndown'
 import { parseHTML } from 'linkedom'
-import pdf from 'pdf-parse'
 
 const MAX_URL_LENGTH = 2048
 const DEFAULT_TIMEOUT = 30000
@@ -85,7 +84,8 @@ export async function fetchContent(url: string): Promise<FetchedContent | FetchE
 
     if (contentType === 'application/pdf') {
       const buffer = await response.arrayBuffer()
-      const data = await pdf(Buffer.from(buffer))
+      const pdf = await import('pdf-parse')
+      const data = await pdf.default(Buffer.from(buffer))
       return { content: data.text, contentType: 'application/pdf' }
     }
 

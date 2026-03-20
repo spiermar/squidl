@@ -2,7 +2,8 @@ import { describe, expect, it, vi, afterEach, beforeEach } from 'vitest'
 import { fetchContent } from '../../src/content-fetcher.js'
 
 vi.mock('pdf-parse', () => ({
-  default: vi.fn().mockResolvedValue({ text: 'Extracted PDF text' })
+  default: vi.fn().mockResolvedValue({ text: 'Extracted PDF text' }),
+  __esModule: true,
 }))
 
 describe('fetchContent', () => {
