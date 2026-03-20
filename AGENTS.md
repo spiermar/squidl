@@ -29,17 +29,26 @@ A multi-service TypeScript application with three main services:
 ### Agent Service
 ```bash
 cd agent-service
-npm run build        # Compile TypeScript to dist/
-npm run dev          # Run in development mode with tsx
-npm run start        # Run compiled JavaScript
+npm run build                 # Compile TypeScript to dist/
+npm run dev                   # Run in development mode with tsx
+npm run start                 # Run compiled JavaScript
+npm test                      # Run all tests with vitest
+npx vitest run                # Run all tests
+npx vitest run tests/unit/websocket-server.test.ts  # Run single test file
+npx vitest run -t "test name"                       # Run tests matching pattern
+npx vitest watch              # Run tests in watch mode
+npx tsc --noEmit              # Type check without emitting
 ```
 
 ### Telegram Service
 ```bash
 cd telegram-service
-npm run build        # Compile TypeScript to dist/
-npm run dev          # Run in development mode with tsx
-npm run start        # Run compiled JavaScript
+npm run build                 # Compile TypeScript to dist/
+npm run dev                   # Run in development mode with tsx
+npm run start                 # Run compiled JavaScript
+node --test src/**/*.test.ts  # Run all tests (uses node:test)
+node --test src/webhook-config.test.ts  # Run single test file
+npx tsc --noEmit              # Type check without emitting
 ```
 
 ### Docker Compose
@@ -50,12 +59,6 @@ docker compose up -d         # Start in detached mode
 docker compose down          # Stop all services
 ```
 
-### Type Checking
-```bash
-cd agent-service && npx tsc --noEmit
-cd telegram-service && npx tsc --noEmit
-```
-
 ## Code Style Guidelines
 
 ### General
@@ -64,26 +67,30 @@ cd telegram-service && npx tsc --noEmit
 - **Single quotes** for strings
 - **ESM modules** (type: "module" in package.json)
 - **Strict TypeScript** enabled (strict: true in tsconfig.json)
+- Keep lines under 100 characters when possible
 
 ### Imports
 - Use named imports where possible: `import { Agent } from "@mariozechner/pi-coding-agent"`
 - Use type-only imports for types: `import type { AgentEvent } from "@mariozechner/pi-agent-core"`
 - Group imports: external packages first, then local modules
-- Use `* as` namespace import for Node.js built-ins: `import * as fs from "fs"`
+- Use `import * as` namespace import for Node.js built-ins: `import { createServer } from 'node:net'`
 - Always include `.js` extension for local imports: `import { WebsocketServer } from "./websocket-server.js"`
+- Use `node:` prefix for Node built-ins: `import assert from 'node:assert/strict'`
 
 ### Types
-- Use `Type.Object()` from pi-ai for tool parameter schemas
-- Use `Static<typeof ...>` to extract TypeScript types from schemas
 - Always type function parameters and return values
 - Use `unknown` type when catching errors, then narrow with `instanceof Error`
+- Use type assertions only when necessary: `(server as unknown as { wss: unknown }).wss`
+- Prefer type aliases for complex types: `type RuntimeListener = { name: string; stop: () => Promise<void> }`
+- Use `interface` for object shapes that may be extended
 
 ### Naming Conventions
-- **PascalCase** for types: `ReadFileParams`, `ClientMessage`
+- **PascalCase** for types, interfaces, and classes: `WebsocketServer`, `ClientMessage`
 - **camelCase** for variables, functions, and object keys
 - **SCREAMING_SNAKE_CASE** for constants: `MAX_CONNECTIONS`
-- Prefix interfaces with descriptive names: `ClientMessage`
 - Descriptive names - avoid single letters except in loops
+- Private class fields: `private wss: WSServer | null`
+- Async functions should indicate async behavior in name when needed
 
 ### Error Handling
 - Always wrap potentially failing code in try/catch
@@ -95,19 +102,31 @@ cd telegram-service && npx tsc --noEmit
   }
   ```
 - Return error details in tool response objects, not throw
-- For WebSocket: use `sendError` helper to send error messages to clients
+- For WebSocket/APIs: use helper functions to send error messages to clients
+- Log errors with context: `console.error('Websocket error:', err.message)`
 
 ### Functions
 - Use async/await for asynchronous operations
 - Keep functions focused and small (< 50 lines when possible)
-- Use function declarations or arrow functions consistently
+- Use arrow functions for callbacks and inline functions
+- Use function declarations for top-level exported functions
 - Use generic types for reusable functions: `async function withRetry<T>(fn: () => Promise<T>)`
+- Return early to reduce nesting
 
 ### Classes
 - Use private fields for encapsulation: `private wss: WSServer | null`
 - Validate constructor parameters with early throws
 - Implement proper cleanup with `dispose()` or `stop()` methods
 - Use signal handlers for graceful shutdown
+- Store instance state in fields, not closures
+
+### Testing
+- agent-service uses **vitest**: `import { describe, expect, it, vi } from 'vitest'`
+- telegram-service uses **node:test**: `import test from 'node:test'`
+- Use `vi.fn()` for mocks in vitest tests
+- Clean up resources in `afterEach` hooks
+- Test error conditions, not just happy paths
+- Mock external dependencies at the module boundary
 
 ## Environment Variables
 
@@ -119,7 +138,7 @@ cd telegram-service && npx tsc --noEmit
 | `LLM_API` | No | API type (default: "openai-completions") |
 | `OPENAI_API_KEY` | No | API key for authentication |
 | `WEBSOCKET_PORT` | No | WebSocket port (default: 8888) |
-| `HTTP_MODE` | No | Run HTTP server instead of WebSocket |
+| `HTTP_PORT` | No | HTTP API port (default: 3000) |
 
 ### Telegram Service
 | Variable | Required | Description |
@@ -140,6 +159,9 @@ pi-agent-container/
 │   │   ├── agent.ts              # Main agent implementation
 │   │   ├── websocket-server.ts   # WebSocket server
 │   │   └── http-server.ts        # HTTP REST API
+│   ├── tests/
+│   │   ├── unit/                 # Unit tests
+│   │   └── integration/          # Integration tests
 │   ├── dist/                     # Compiled output
 │   ├── Dockerfile
 │   ├── package.json
@@ -147,7 +169,8 @@ pi-agent-container/
 ├── telegram-service/
 │   ├── src/
 │   │   ├── index.ts              # Telegram bot entry point
-│   │   └── http-client.ts        # Agent API client
+│   │   ├── http-client.ts        # Agent API client
+│   │   └── *.test.ts             # Tests alongside source
 │   ├── dist/
 │   ├── Dockerfile
 │   ├── package.json
@@ -165,28 +188,30 @@ pi-agent-container/
 
 1. Make changes in the appropriate service's `src/` directory
 2. Run `npm run dev` in that service's directory to test changes
-3. Run `npm run build` before deploying
-4. Test with Docker Compose: `docker compose up --build`
+3. Run `npx tsc --noEmit` to type check before committing
+4. Run relevant tests before committing changes
+5. Run `npm run build` before deploying
+6. Test with Docker Compose: `docker compose up --build`
 
-## WebSocket Server Protocol
+## API Reference
 
-When running in WebSocket mode, clients send messages:
+### WebSocket Protocol
 ```typescript
-// Client message format
+// Client -> Server
 { type: "prompt", content: "your prompt here" }
 { type: "disconnect" }
 
-// Server sends AgentEvent objects as JSON
+// Server -> Client (AgentEvent objects as JSON)
+{ type: "error", message: "error description" }
 ```
 
-## HTTP API
-
-When running in HTTP mode:
+### HTTP API
 ```bash
-POST /api/sessions              # Create session
-POST /api/sessions/:id/prompt   # Send prompt
-GET /api/sessions/:id           # Get session info
-DELETE /api/sessions/:id        # Delete session
+GET  /healthz                    # Health check
+POST /api/sessions               # Create session -> { sessionId, createdAt }
+POST /api/sessions/:id/prompt    # Send prompt -> { status, result }
+GET  /api/sessions/:id           # Get session info
+DELETE /api/sessions/:id         # Delete session
 ```
 
 ## Notes
@@ -194,4 +219,4 @@ DELETE /api/sessions/:id        # Delete session
 - Each service has its own `package.json` and `tsconfig.json`
 - No linting or formatting tools configured - manually ensure consistency
 - Agent uses `createCodingTools` from pi-coding-agent for file system access
-- Session management supports creating new sessions and continuing recent ones
+- Both WebSocket and HTTP servers run simultaneously in agent-service
