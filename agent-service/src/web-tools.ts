@@ -1,5 +1,5 @@
 import { Type, type Static } from '@sinclair/typebox'
-import type { AgentTool, AgentToolResult } from '@mariozechner/pi-agent-core'
+import type { ExtensionAPI, AgentToolResult } from '@mariozechner/pi-coding-agent'
 import { BraveSearchClient } from './brave-search.js'
 import { fetchContent } from './content-fetcher.js'
 
@@ -62,10 +62,10 @@ function formatFetchResult(result: FetchedContent | FetchError): string {
   return result.content
 }
 
-export function createWebTools(): AgentTool<any>[] {
+export default function webToolsExtension(pi: ExtensionAPI) {
   const braveClient = new BraveSearchClient()
 
-  const webSearchTool: AgentTool<typeof webSearchSchema> = {
+  pi.registerTool({
     name: 'web_search',
     label: 'Web Search',
     description: 'Search the web using Brave Search API. Returns a list of results with titles, URLs, and descriptions.',
@@ -79,9 +79,9 @@ export function createWebTools(): AgentTool<any>[] {
         details: result,
       }
     },
-  }
+  })
 
-  const webFetchTool: AgentTool<typeof webFetchSchema> = {
+  pi.registerTool({
     name: 'web_fetch',
     label: 'Web Fetch',
     description: 'Fetch content from a URL. Extracts readable content from web pages (HTML→markdown) and PDFs (text).',
@@ -93,7 +93,5 @@ export function createWebTools(): AgentTool<any>[] {
         details: result,
       }
     },
-  }
-
-  return [webSearchTool, webFetchTool]
+  })
 }

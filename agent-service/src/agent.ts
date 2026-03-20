@@ -2,7 +2,7 @@ import { createAgentSession, SessionManager, createCodingTools, DefaultResourceL
 import { getModel, streamSimple } from "@mariozechner/pi-ai";
 import { WebsocketServer } from "./websocket-server.js";
 import { startHttpServer } from "./http-server.js";
-import { createWebTools } from "./web-tools.js"
+import webToolsExtension from "./web-tools.js"
 import type { Model } from "@mariozechner/pi-ai";
 
 type RuntimeListener = {
@@ -43,6 +43,7 @@ export async function createSession(sessionManager: SessionManager) {
   const resourceLoader = new DefaultResourceLoader({
     cwd: process.cwd(),
     systemPromptOverride: () => `You are a helpful assistant that speaks like a pirate. Always end responses with "Arrr!"`,
+    extensionFactories: [webToolsExtension],
   });
   await resourceLoader.reload();
 
@@ -57,7 +58,7 @@ export async function createSession(sessionManager: SessionManager) {
     cwd: process.cwd(),
     model,
     thinkingLevel: "medium",
-    tools: [...createCodingTools(process.cwd()), ...createWebTools()],
+    tools: createCodingTools(process.cwd()),
     resourceLoader: resourceLoader,
     sessionManager,
   });
