@@ -34,6 +34,13 @@ function extractContentType(header: string | null): string | null {
   return header.split(';')[0].trim().toLowerCase()
 }
 
+function guessContentTypeFromUrl(url: string): string | null {
+  const path = new URL(url).pathname.toLowerCase()
+  if (path.endsWith('.pdf')) return 'application/pdf'
+  if (path.endsWith('.html') || path.endsWith('.htm')) return 'text/html'
+  return null
+}
+
 async function extractHtml(html: string): Promise<string> {
   const { document } = parseHTML(html)
   const reader = new Readability(document)
@@ -56,6 +63,7 @@ export async function fetchContent(url: string): Promise<FetchedContent | FetchE
     const controller = new AbortController()
     const timeoutId = setTimeout(() => controller.abort(), DEFAULT_TIMEOUT)
 
+    // Note: fetch follows up to 20 redirects by default (spec says max 5, but native fetch doesn't support custom limits)
     const response = await fetch(url, {
       signal: controller.signal,
       redirect: 'follow',
@@ -67,6 +75,7 @@ export async function fetchContent(url: string): Promise<FetchedContent | FetchE
     }
 
     const contentType = extractContentType(response.headers.get('content-type'))
+      ?? guessContentTypeFromUrl(url)
 
     if (contentType === 'text/html') {
       const html = await response.text()
